@@ -1,21 +1,46 @@
-# Safe Caption Web
+# Image Caption Generator
 
-A privacy-focused image caption generator that creates detailed descriptions for your images without ever storing them.
+A versatile image caption generator with both offline local processing and Google's Gemini AI integration.
 
 ## 🌟 Features
 
-- **Privacy First**: Images are processed in memory and never stored
-- **AI-Powered Captions**: Uses Hugging Face's free models for high-quality captions
-- **Beautiful UI**: Clean, modern interface with pleasing aesthetics
-- **Zero Cost**: Uses free AI services (no paid subscriptions required)
-- **Easily Deployable**: Simple to host on Streamlit Sharing or your own server
+- **Dual Caption Sources**: Choose between local processing or Google's Gemini AI
+- **Privacy Option**: Local mode processes images entirely offline with no data sharing
+- **Advanced AI**: Gemini mode provides context-aware, detailed captions
+- **Custom Prompts**: Guide the AI to generate captions in specific styles
+- **Beautiful UI**: Dark-themed, modern interface with visual feedback
+- **Memory Safe**: Images are processed in memory and never stored
 
 ## 📋 How It Works
 
-1. **Upload Image**: Select any JPG, JPEG, or PNG file
-2. **AI Processing**: Your image is sent to the Hugging Face API for analysis
-3. **Caption Generation**: A detailed, descriptive caption is created
-4. **Memory Cleanup**: All image data is cleared from memory after processing
+### Application Workflow
+
+1. **Choose Caption Source**: Select between local processing or Gemini AI
+2. **Configure Options**: For Gemini mode, customize the prompt if desired
+3. **Upload Image**: Select any JPG, JPEG, or PNG file
+4. **Processing**: The image is analyzed based on your selected method
+5. **View Results**: Get a beautifully displayed, descriptive caption
+6. **Memory Cleanup**: All image data is cleared from memory after processing
+
+### Technical Workflow
+
+#### Local Processing Mode:
+
+1. Image is loaded into memory using PIL (Python Imaging Library)
+2. Basic properties are extracted (dimensions, aspect ratio)
+3. Color analysis identifies dominant colors and brightness
+4. Edge detection estimates image complexity
+5. Simple heuristics help guess content type
+6. Caption is constructed from these analyzed elements
+
+#### Gemini AI Mode:
+
+1. Image is converted to base64 format
+2. The application dynamically selects the best available Gemini model
+3. Image and custom prompt are sent to Google's Gemini API
+4. The AI analyzes the actual content and context of the image
+5. A detailed, contextually accurate caption is generated
+6. The result is displayed with proper error handling
 
 ## 🚀 Getting Started
 
@@ -34,19 +59,55 @@ cd Image-Caption-Generator
 pip install -r requirements.txt
 ```
 
-### API Setup (Optional)
+### API Setup
 
-The app works without an API key using Hugging Face's anonymous access, but for better rate limits:
+#### For Gemini AI:
 
-1. Create a free Hugging Face account at [huggingface.co](https://huggingface.co/join)
-2. Get your API key from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+1. Create a Google AI Studio account at [ai.google.dev](https://ai.google.dev/)
+2. Get your API key from the API Keys section
 3. Add it to the `.env` file:
 
 ```
-HUGGINGFACE_API_KEY=your_huggingface_key_here
+GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Running the App
+
+Run the application with Streamlit:
+
+```bash
+streamlit run app.py
+```
+
+The web interface will open in your default browser, typically at [http://localhost:8501](http://localhost:8501).
+
+## 💡 Usage Tips
+
+1. **For quick captions without API setup**: Use the "Local Processing" option which works offline
+2. **For detailed, context-aware captions**: Configure your Gemini API key and use the "Gemini AI" option
+3. **Customize Gemini prompts**: Try different styles like "Professional", "Gen Z", or your own custom prompt
+4. **Image requirements**: For best results, use clear images with good lighting
+
+## 🔍 Tech Stack
+
+- **Streamlit**: Web application framework
+- **PIL (Pillow)**: Image processing in local mode
+- **Google Generative AI**: Gemini integration for advanced captions
+- **Python-dotenv**: Environment variable management
+
+## 🔒 Privacy
+
+- Local processing mode keeps your images entirely on your device
+- When using Gemini AI, images are sent to Google's servers for processing according to their [privacy policy](https://ai.google.dev/privacy)
+- No images or captions are ever stored persistently by this application
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to submit issues or pull requests to improve the application.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 Start the application:
 
