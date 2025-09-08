@@ -72,7 +72,7 @@ def main():
     st.title("🖼️ Safe Image Caption Generator")
     
     # Add simple caption text in a single line
-    st.caption("Please upload an image to get started. Our AI will analyze the visual elements and generate a beautiful, descriptive caption.")
+    st.caption("Our AI will analyze the visual elements and generate a beautiful, descriptive caption.")
     
     # File uploader
     uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
