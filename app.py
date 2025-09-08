@@ -59,21 +59,17 @@ def main():
             bottom: 0;
             left: 0;
             width: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 10px 20px;
+            background: #e0e0e0;
+            padding: 10px 0;
             font-size: 14px;
             color: #555;
-            border-top: 1px solid #eee;
             text-align: center;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
         }
         </style>
     """, unsafe_allow_html=True)
     
     # Main content
     st.title("🖼️ Safe Image Caption Generator")
-    st.markdown("Please upload an image to get started. Our AI will analyze the visual elements and generate a beautiful, descriptive caption. The process is completely secure and private - we never store your images.", unsafe_allow_html=False)
 
     # File uploader
     uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
@@ -139,12 +135,12 @@ def main():
     
     # Footer
     st.markdown("""
-        <footer>
-            <p>Safe Caption Web — Your privacy-focused image captioning solution</p>
+        <div style='position: fixed; bottom: 0; width: 100%; background-color: #e0e0e0; padding: 10px 0; text-align: center; left: 0;'>
+            <p style='color: #555; margin-bottom: 5px;'>Safe Caption Web — Your privacy-focused image captioning solution</p>
             <p style='font-size: 12px; color: #777; margin-top: 5px;'>
                 Developed with ❤️ | Images processed securely in memory | Never stored
             </p>
-        </footer>
+        </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
