@@ -31,7 +31,9 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
     try:
         # Check if the API key is available
         api_key = os.getenv("GOOGLE_GEMINI_API_KEY")
-        if not api_key or api_key == "your_gemini_api_key_here":
+        # Print debug info to console (not visible to user)
+        print(f"API Key exists: {bool(api_key)}, Value: {api_key[:5]}..." if api_key else "API Key not found")
+        if not api_key:
             return "⚠️ Gemini API key not configured. Please add your API key to the .env file."
         
         # Configure the Gemini API client
@@ -40,17 +42,10 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
         # Get the Gemini model that supports vision
         # Try the newer model names first, then fall back to older ones
         try:
-            # List available models to find the vision-capable one
-            models = genai.list_models()
-            vision_models = [m.name for m in models if "vision" in m.name.lower() or "image" in m.supported_generation_methods]
-            
-            if vision_models:
-                model = genai.GenerativeModel(vision_models[0])
-                st.info(f"Using Gemini model: {vision_models[0]}")
-            else:
-                # Fall back to Gemini 1.5 Flash
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                st.info("Using Gemini 1.5 Flash model")
+            # Directly use the Gemini 1.5 Flash model which we know works with images
+            # and doesn't trigger quota limits as easily
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            st.info("Using Gemini 1.5 Flash model - compatible with image processing")
         except Exception as model_error:
             st.warning(f"Error finding vision models: {str(model_error)}")
             # Fall back to latest Gemini model
@@ -119,7 +114,10 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
             return f"Unable to generate caption with the current model. Error: {str(gen_error)}"
     
     except Exception as e:
-        st.error(f"Error generating caption with Gemini: {str(e)}")
+        error_message = f"Error generating caption with Gemini: {str(e)}"
+        # Print detailed error for debugging
+        print(f"DETAILED ERROR: {type(e).__name__}: {e}")
+        st.error(error_message)
         return f"Unable to generate caption with Gemini. Error: {str(e)}"
 
 def generate_caption(image_bytes, caption_source="local", custom_prompt=None):
