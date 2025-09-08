@@ -12,84 +12,144 @@ def generate_caption(image_bytes):
     time.sleep(1)
     return "A beautiful mountain landscape with snow-capped peaks reflected in a crystal clear lake, surrounded by lush pine forests under a bright blue sky."
 
-st.set_page_config(page_title="Image Caption Generator", page_icon="🖼️", layout="centered")
-st.markdown("""
-    <style>
-    .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        border-radius: 20px;
-        padding: 2rem;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-    }
-    .stButton>button {
-        background: linear-gradient(to right, #4e54c8, #8f94fb);
-        color: white;
-        border-radius: 30px;
-        padding: 0.6rem 1.8rem;
-        font-size: 1.1rem;
-        border: none;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 10px rgba(78, 84, 200, 0.3);
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(78, 84, 200, 0.4);
-    }
-    .stTextInput>div>input {
-        border-radius: 10px;
-        border: 2px solid #e0e5f2;
-    }
-    .stFileUploader {
-        border-radius: 10px;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.6);
-        backdrop-filter: blur(5px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    }
-    .css-1hveriv, .css-qbe2hs {
-        font-weight: 600;
-        color: #4e54c8;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Create a multi-page app
+def main():
+    # Set page config
+    st.set_page_config(page_title="Safe Caption Web", page_icon="🖼️", layout="centered")
+    
+    # Apply CSS
+    st.markdown("""
+        <style>
+        .main {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        .stButton>button {
+            background: linear-gradient(to right, #4e54c8, #8f94fb);
+            color: white;
+            border-radius: 30px;
+            padding: 0.6rem 1.8rem;
+            font-size: 1.1rem;
+            border: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(78, 84, 200, 0.3);
+        }
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(78, 84, 200, 0.4);
+        }
+        .stTextInput>div>input {
+            border-radius: 10px;
+            border: 2px solid #e0e5f2;
+        }
+        .stFileUploader {
+            border-radius: 10px;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .css-1hveriv, .css-qbe2hs {
+            font-weight: 600;
+            color: #4e54c8;
+        }
+        footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            font-size: 14px;
+            color: #555;
+            border-top: 1px solid #eee;
+            text-align: center;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Sidebar for navigation
+    page = st.sidebar.radio("Navigate", ["Home", "About"])
+    
+    if page == "Home":
+        home_page()
+    else:
+        about_page()
+    
+    # Footer
+    st.markdown("""
+        <footer>
+            <p>Safe Caption Web — Your privacy-focused image captioning solution</p>
+            <p style='font-size: 12px; color: #777; margin-top: 5px;'>
+                Developed with ❤️ | Images processed securely in memory | Never stored
+            </p>
+        </footer>
+    """, unsafe_allow_html=True)
 
-st.title("🖼️ Safe Image Caption Generator")
-st.markdown("""
-    <div style='background: rgba(255, 255, 255, 0.6); padding: 1.5rem; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);'>
-        <p style='color: #555; font-size: 18px; line-height: 1.6;'>
-            Upload an image and get a soothing AI-generated caption. 
-            <span style='color: #4e54c8; font-weight: 600;'>Your privacy is our priority</span> - 
-            images are processed in memory and never stored.
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+def home_page():
+    st.title("🖼️ Safe Image Caption Generator")
+    st.markdown("""
+        <div style='background: rgba(255, 255, 255, 0.6); padding: 1.5rem; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);'>
+            <p style='color: #555; font-size: 18px; line-height: 1.6;'>
+                Upload an image and get a soothing AI-generated caption. 
+                <span style='color: #4e54c8; font-weight: 600;'>Your privacy is our priority</span> - 
+                images are processed in memory and never stored.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Add app description
-st.markdown("""
-    <div style='background: linear-gradient(to right, rgba(78, 84, 200, 0.05), rgba(143, 148, 251, 0.05)); 
-               padding: 1.2rem; border-radius: 15px; margin-bottom: 25px; 
-               border-left: 3px solid #4e54c8;'>
-        <h3 style='color: #4e54c8; margin-bottom: 10px; font-weight: 500;'>About This App</h3>
-        <p style='color: #555; font-size: 16px; line-height: 1.5;'>
-            This application uses artificial intelligence to generate beautiful, descriptive captions for your images.
-            Perfect for content creators, social media posts, or accessibility purposes.
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+    # Add upload section with more description
+    st.markdown("""
+        <div style='background: rgba(255, 255, 255, 0.8); padding: 1.2rem; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);'>
+            <h3 style='color: #4e54c8; margin-bottom: 10px; font-weight: 500;'>📤 Upload Your Image</h3>
+            <p style='color: #555; font-size: 16px; margin-bottom: 15px;'>
+                Select a JPG, JPEG, or PNG image to generate a detailed, context-aware caption.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Add upload section with more description
-st.markdown("""
-    <div style='background: rgba(255, 255, 255, 0.8); padding: 1.2rem; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);'>
-        <h3 style='color: #4e54c8; margin-bottom: 10px; font-weight: 500;'>📤 Upload Your Image</h3>
-        <p style='color: #555; font-size: 16px; margin-bottom: 15px;'>
-            Select a JPG, JPEG, or PNG image to generate a detailed, context-aware caption.
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+    # File uploader
+    uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
 
-uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
+    if uploaded_file is not None:
+        process_image(uploaded_file)
+    else:
+        display_empty_state()
 
-if uploaded_file is not None:
+def about_page():
+    st.title("About Safe Caption Web")
+    
+    st.markdown("""
+        <div style='background: rgba(255, 255, 255, 0.8); padding: 1.5rem; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);'>
+            <h2 style='color: #4e54c8; margin-bottom: 15px;'>Our Mission</h2>
+            <p style='color: #555; font-size: 16px; line-height: 1.6;'>
+                Safe Caption Web provides a privacy-focused solution for generating descriptive captions for your images.
+                Our application uses artificial intelligence to analyze visual elements and create beautiful, 
+                context-aware captions - all while ensuring your images never leave your device's memory.
+            </p>
+            
+            <h3 style='color: #4e54c8; margin: 20px 0 10px 0;'>Key Features</h3>
+            <ul style='color: #555; font-size: 16px; line-height: 1.6;'>
+                <li><b>Privacy-First:</b> Images are processed in memory and never stored on servers</li>
+                <li><b>AI-Powered:</b> Detailed captions that recognize objects, scenery, colors, and composition</li>
+                <li><b>User-Friendly:</b> Simple interface with a soothing design</li>
+                <li><b>Versatile:</b> Perfect for social media content, blog posts, and accessibility needs</li>
+            </ul>
+            
+            <h3 style='color: #4e54c8; margin: 20px 0 10px 0;'>How It Works</h3>
+            <p style='color: #555; font-size: 16px; line-height: 1.6;'>
+                Our application uses advanced computer vision and natural language processing to analyze your images 
+                and generate appropriate descriptive captions. The entire process happens in your browser's memory,
+                ensuring that your images are never stored or transmitted to external servers.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+def process_image(uploaded_file):
     image_bytes = uploaded_file.read()
     image = Image.open(io.BytesIO(image_bytes))
     
@@ -130,7 +190,8 @@ if uploaded_file is not None:
     del image_bytes
     del image
     del caption
-else:
+
+def display_empty_state():
     st.markdown("""
         <div style='background: rgba(255, 255, 255, 0.7); padding: 2rem; border-radius: 15px; 
                    text-align: center; margin: 2rem 0; box-shadow: 0 4px 15px rgba(0,0,0,0.05);'>
@@ -161,3 +222,6 @@ else:
             </p>
         </div>
     """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
