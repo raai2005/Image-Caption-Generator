@@ -2,15 +2,91 @@ import streamlit as st
 from PIL import Image
 import io
 import requests
+import base64
+import os
+from dotenv import load_dotenv
+# The OpenAI import will be loaded dynamically in the function to handle cases where it's not installed
 
 def generate_caption(image_bytes):
-    # Replace with your AI endpoint or model
-    # For demonstration, returns a dummy caption
-    # You can integrate with HuggingFace, OpenAI, etc.
-    import time
-    # Simulate processing time
-    time.sleep(1)
-    return "A beautiful mountain landscape with snow-capped peaks reflected in a crystal clear lake, surrounded by lush pine forests under a bright blue sky."
+    """
+    Generate a caption for an image using Hugging Face's Inference API.
+    
+    Args:
+        image_bytes: The binary image data
+        
+    Returns:
+        str: A descriptive caption for the image
+    """
+    try:
+        import os
+        from dotenv import load_dotenv
+        
+        # Load API key from .env file
+        load_dotenv()
+        api_key = os.getenv("HUGGINGFACE_API_KEY")
+        
+        # If no API key or using the placeholder, try with anonymous access
+        # Hugging Face allows limited free requests without an API key
+        headers = {}
+        if api_key and api_key != "your_huggingface_key_here":
+            headers = {"Authorization": f"Bearer {api_key}"}
+        
+        # Option 1: Using Salesforce BLIP image captioning model (completely free)
+        API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
+        
+        # For higher quality captions but with usage limits:
+        # API_URL = "https://api-inference.huggingface.co/models/microsoft/git-large-coco"
+        
+        # Send request to Hugging Face
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            data=image_bytes
+        )
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            result = response.json()
+            
+            # Different models return results in different formats
+            if isinstance(result, list) and len(result) > 0:
+                if isinstance(result[0], dict) and "generated_text" in result[0]:
+                    caption = result[0]["generated_text"]
+                elif isinstance(result[0], str):
+                    caption = result[0]
+                else:
+                    caption = str(result[0])
+            else:
+                caption = str(result)
+                
+            # Clean up caption if needed
+            caption = caption.strip()
+            if caption.startswith('"') and caption.endswith('"'):
+                caption = caption[1:-1]
+                
+            return caption
+        else:
+            # Model might still be loading or there's an error
+            error_msg = f"API Error: {response.status_code} - {response.text}"
+            st.error(error_msg)
+            if "loading" in response.text.lower():
+                return "The caption model is still loading. This happens when the model is accessed for the first time. Please try again in a few seconds."
+            else:
+                return f"Could not generate a caption. Error: {response.status_code}"
+        
+    except Exception as e:
+        # Handle any errors gracefully
+        st.error(f"Error generating caption: {str(e)}")
+        
+        # Return one of these fallback captions based on error type
+        if "authorization" in str(e).lower() or "authentication" in str(e).lower():
+            return "API key issue: Please configure your Hugging Face API key in the .env file or try without an API key for limited usage."
+        elif "rate limit" in str(e).lower() or "too many requests" in str(e).lower():
+            return "Rate limit reached: The API is currently experiencing high demand. Please try again later."
+        elif "connection" in str(e).lower() or "timeout" in str(e).lower():
+            return "Connection error: Please check your internet connection and try again."
+        else:
+            return "Could not generate a caption for this image. Please try again later."
 
 def main():
     # Set page config
