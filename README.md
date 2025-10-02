@@ -1,15 +1,27 @@
-# Image Caption Generator
+# Image Caption Creator
 
-A versatile image caption generator with both offline local processing and Google's Gemini AI integration.
+A versatile image caption creator with **two distinct modes**: detailed offline image analysis and AI-powered mood-based caption generation using Google's Gemini.
 
 ## 🌟 Features
 
-- **Dual Caption Sources**: Choose between local processing or Google's Gemini AI
-- **Privacy Option**: Local mode processes images entirely offline with no data sharing
-- **Advanced AI**: Gemini mode provides context-aware, detailed captions
-- **Custom Prompts**: Guide the AI to generate captions in specific styles
-- **Beautiful UI**: Dark-themed, modern interface with visual feedback
-- **Memory Safe**: Images are processed in memory and never stored
+### 📊 Local Offline Reader
+
+- **🔍 Detailed Image Analysis**: Comprehensive technical analysis of uploaded images
+- **📐 Dimensions and Aspect Ratio**: Complete size and orientation information
+- **🌈 Color Analysis**: Dominant colors, brightness, contrast levels with percentages
+- **📊 Brightness and Contrast Levels**: Detailed lighting analysis
+- **🔍 Visual Complexity Assessment**: Edge detection and complexity evaluation
+- **💾 File Information**: Size, format, and metadata analysis
+- **✅ 100% Offline**: No internet connection required, complete privacy
+
+### 🤖 Gemini AI Caption Generator
+
+- **🎨 Mood-Based Caption Styles**: 12 different styles (Professional, Casual, Creative, Humorous, etc.)
+- **📱 Social Media Optimized**: Gen Z style, hashtag-ready captions
+- **🎭 Multiple Personality Types**: Various caption personalities and tones
+- **✨ Creative and Contextual Captions**: AI understands image content and generates relevant captions
+- **🔧 Custom Prompt Support**: Write your own prompts for unique caption styles
+- **🌐 Requires API Key Setup**: Uses Google's Gemini AI for advanced caption generation
 
 ## 📋 How It Works
 

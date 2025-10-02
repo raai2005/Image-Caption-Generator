@@ -39,18 +39,26 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
         # Configure the Gemini API client
         genai.configure(api_key=api_key)
         
-        # Get the Gemini model that supports vision
-        # Try the newer model names first, then fall back to older ones
-        try:
-            # Directly use the Gemini 1.5 Flash model which we know works with images
-            # and doesn't trigger quota limits as easily
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            st.info("Using Gemini 1.5 Flash model - compatible with image processing")
-        except Exception as model_error:
-            st.warning(f"Error finding vision models: {str(model_error)}")
-            # Fall back to latest Gemini model
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            st.info("Using fallback model: gemini-1.5-flash")
+        # Select a supported vision model with robust fallbacks
+        model_candidates = [
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-pro-latest',
+            'gemini-1.0-pro-vision-latest',
+            'gemini-pro-vision',
+        ]
+        model = None
+        last_error = None
+        for name in model_candidates:
+            try:
+                model = genai.GenerativeModel(name)
+                st.info(f"Using Gemini model: {name}")
+                break
+            except Exception as e:
+                last_error = e
+                continue
+        if model is None:
+            st.error(f"Unable to initialize a Gemini vision model. Last error: {last_error}")
+            return "Gemini model initialization failed. Please check your API access and model availability."
         
         # Default prompt if none provided
         if not prompt:
@@ -96,7 +104,7 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
             ]
             
             response = model.generate_content(
-                contents=[prompt, *image_parts],
+                contents=[prompt, image_parts[0]],
                 generation_config=generation_config,
                 safety_settings=safety_settings,
             )
@@ -120,7 +128,236 @@ def generate_caption_with_gemini(image_bytes, prompt=None):
         st.error(error_message)
         return f"Unable to generate caption with Gemini. Error: {str(e)}"
 
-def generate_caption(image_bytes, caption_source="local", custom_prompt=None):
+def analyze_image_detailed(image_bytes):
+    """
+    Perform detailed offline image analysis for comprehensive image reading.
+    
+    Args:
+        image_bytes: The binary image data
+        
+    Returns:
+        dict: Detailed analysis results
+    """
+    try:
+        # Open the image
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # Basic properties
+        width, height = img.size
+        format_name = img.format if img.format else "Unknown"
+        mode = img.mode
+        aspect_ratio = width / height
+        total_pixels = width * height
+        
+        # Determine orientation
+        if aspect_ratio > 1.2:
+            orientation = "Landscape"
+        elif aspect_ratio < 0.8:
+            orientation = "Portrait"
+        else:
+            orientation = "Square"
+        
+        # Color analysis
+        is_color = img.mode in ("RGB", "RGBA", "CMYK")
+        color_analysis = {}
+        
+        if is_color:
+            # Convert to RGB for analysis
+            if img.mode != "RGB":
+                img_rgb = img.convert("RGB")
+            else:
+                img_rgb = img
+                
+            # Resize for faster processing
+            img_small = img_rgb.resize((100, 100))
+            
+            # Get color statistics
+            stat = ImageStat.Stat(img_small)
+            r, g, b = stat.mean
+            
+            # Calculate brightness and contrast
+            brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            contrast = max(stat.stddev) / 255
+            
+            # Dominant colors analysis
+            img_quantized = img_small.quantize(colors=8)
+            palette = img_quantized.getpalette()
+            color_counts = img_quantized.getcolors()
+            
+            dominant_colors = []
+            if palette and color_counts:
+                color_counts.sort(reverse=True)
+                
+                for count, color_index in color_counts[:5]:
+                    r, g, b = palette[color_index*3:color_index*3+3]
+                    percentage = (count / (100 * 100)) * 100
+                    
+                    # Convert RGB to HSV for better color naming
+                    h, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
+                    
+                    # Enhanced color naming
+                    if s < 0.1:
+                        if v < 0.3: color_name = "Black"
+                        elif v > 0.8: color_name = "White"
+                        else: color_name = "Gray"
+                    elif h < 0.05 or h > 0.95: color_name = "Red"
+                    elif 0.05 <= h < 0.15: color_name = "Orange"
+                    elif 0.15 <= h < 0.22: color_name = "Yellow"
+                    elif 0.22 <= h < 0.41: color_name = "Green"
+                    elif 0.41 <= h < 0.55: color_name = "Teal"
+                    elif 0.55 <= h < 0.75: color_name = "Blue"
+                    elif 0.75 <= h < 0.82: color_name = "Purple"
+                    else: color_name = "Pink"
+                    
+                    # Add intensity and tone
+                    if color_name not in ["Black", "White", "Gray"]:
+                        if s < 0.4: color_name = f"Pale {color_name}"
+                        elif s > 0.8: color_name = f"Vibrant {color_name}"
+                        if v < 0.4: color_name = f"Dark {color_name}"
+                    
+                    dominant_colors.append({
+                        "name": color_name,
+                        "percentage": round(percentage, 1),
+                        "rgb": (r, g, b)
+                    })
+            
+            color_analysis = {
+                "is_color": True,
+                "brightness": round(brightness * 100, 1),
+                "contrast": round(contrast * 100, 1),
+                "dominant_colors": dominant_colors,
+                "brightness_level": "Dark" if brightness < 0.3 else "Bright" if brightness > 0.7 else "Balanced",
+                "contrast_level": "Low" if contrast < 0.2 else "High" if contrast > 0.5 else "Medium"
+            }
+        else:
+            color_analysis = {
+                "is_color": False,
+                "mode": "Grayscale/Black & White"
+            }
+        
+        # Edge and complexity analysis
+        edge_img = img.convert("L").filter(ImageFilter.FIND_EDGES)
+        edge_stat = ImageStat.Stat(edge_img)
+        edge_mean = edge_stat.mean[0]
+        
+        complexity_level = "Simple/Minimalist" if edge_mean < 20 else "Detailed/Complex" if edge_mean > 50 else "Well-Composed"
+        
+        # File size estimation (approximate)
+        file_size_kb = len(image_bytes) / 1024
+        
+        # Aspect ratio classification
+        if aspect_ratio > 2.5:
+            aspect_class = "Ultra-wide/Panoramic"
+        elif aspect_ratio > 1.5:
+            aspect_class = "Wide"
+        elif aspect_ratio > 1.1:
+            aspect_class = "Standard Landscape"
+        elif aspect_ratio > 0.9:
+            aspect_class = "Square"
+        elif aspect_ratio > 0.7:
+            aspect_class = "Standard Portrait"
+        elif aspect_ratio > 0.4:
+            aspect_class = "Tall Portrait"
+        else:
+            aspect_class = "Ultra-tall"
+        
+        return {
+            "basic_info": {
+                "dimensions": f"{width} × {height} pixels",
+                "orientation": orientation,
+                "aspect_ratio": round(aspect_ratio, 2),
+                "aspect_class": aspect_class,
+                "total_pixels": f"{total_pixels:,}",
+                "file_format": format_name,
+                "color_mode": mode,
+                "file_size": f"{file_size_kb:.1f} KB"
+            },
+            "color_analysis": color_analysis,
+            "complexity": {
+                "level": complexity_level,
+                "edge_density": round(edge_mean, 1)
+            }
+        }
+        
+    except Exception as e:
+        return {"error": f"Error analyzing image: {str(e)}"}
+
+def get_mood_prompts():
+    """Get mood-based prompt templates for caption generation."""
+    return {
+        "Professional": "Generate a professional, business-appropriate caption for this image that would work well for corporate social media.",
+        "Casual/Friendly": "Create a casual, friendly caption that feels personal and relatable for everyday social media posts.",
+        "Creative/Artistic": "Write an artistic, creative caption that focuses on the aesthetic and emotional aspects of this image.",
+        "Humorous/Funny": "Generate a humorous, light-hearted caption that could make people smile or laugh.",
+        "Inspirational": "Create an uplifting, motivational caption that inspires and encourages viewers.",
+        "Travel/Adventure": "Write a travel-focused caption that captures the sense of adventure and wanderlust.",
+        "Food/Culinary": "Generate a mouth-watering caption perfect for food photography and culinary content.",
+        "Fashion/Style": "Create a stylish, fashion-forward caption that highlights the aesthetic and trendiness.",
+        "Nature/Outdoor": "Write a caption that celebrates nature, outdoor beauty, and environmental appreciation.",
+        "Minimalist": "Generate a clean, simple caption that matches a minimalist aesthetic.",
+        "Gen Z/Social Media": "Create a trendy, Gen Z style caption with relevant hashtags and social media language.",
+        "Custom": "Custom prompt"
+    }
+
+def compose_gemini_prompt(
+    base_prompt: str,
+    platform: str,
+    tone: str,
+    length: str,
+    include_hashtags: bool,
+    num_hashtags: int,
+    include_emojis: bool,
+    num_emojis: int,
+    keywords_csv: str,
+    audience: str,
+    call_to_action: str
+) -> str:
+    """Compose a detailed prompt for Gemini based on user-selected options.
+
+    The function appends clear, actionable instructions so the model tailors
+    its caption output to the desired platform, tone, and formatting.
+    """
+    instructions = [base_prompt]
+
+    # Core style constraints
+    if platform and platform != "Generic":
+        instructions.append(f"Target the '{platform}' platform and follow its best practices.")
+    if tone:
+        instructions.append(f"Use a {tone.lower()} tone.")
+    if length:
+        instructions.append(f"Keep the caption {length.lower()} in length.")
+
+    # Formatting controls
+    if include_hashtags:
+        instructions.append(
+            f"Include up to {num_hashtags} concise, relevant hashtags at the end (no spaces inside hashtags)."
+        )
+    else:
+        instructions.append("Do not include any hashtags.")
+
+    if include_emojis:
+        instructions.append(f"Use up to {num_emojis} relevant emojis for tone and emphasis.")
+    else:
+        instructions.append("Do not include any emojis.")
+
+    # Content constraints
+    if keywords_csv.strip():
+        instructions.append(
+            "Naturally incorporate these keywords if appropriate: " + keywords_csv.strip()
+        )
+    if audience.strip():
+        instructions.append(f"Write for this audience: {audience.strip()}.")
+    if call_to_action.strip():
+        instructions.append(f"End with a subtle call-to-action: {call_to_action.strip()}.")
+
+    # Safety and output format guidance
+    instructions.append(
+        "Return only the final caption text without explanations. Keep it readable and persuasive."
+    )
+
+    return "\n".join(instructions)
+
+def generate_caption(image_bytes, caption_source="local", custom_prompt=None, mood_type="Professional"):
     """
     Generate a caption for an image using either local analysis or Gemini.
     
@@ -128,6 +365,7 @@ def generate_caption(image_bytes, caption_source="local", custom_prompt=None):
         image_bytes: The binary image data
         caption_source: "local" for offline processing, "gemini" for AI-generated captions
         custom_prompt: Custom prompt for Gemini (ignored for local captions)
+        mood_type: Mood/style for caption generation
         
     Returns:
         str: A descriptive caption for the image
@@ -135,162 +373,80 @@ def generate_caption(image_bytes, caption_source="local", custom_prompt=None):
     # If Gemini is selected and available, use it
     if caption_source == "gemini":
         if GEMINI_AVAILABLE:
-            return generate_caption_with_gemini(image_bytes, custom_prompt)
+            # Use mood-based prompts
+            mood_prompts = get_mood_prompts()
+            if mood_type in mood_prompts and mood_type != "Custom":
+                prompt = mood_prompts[mood_type]
+            elif custom_prompt:
+                prompt = custom_prompt
+            else:
+                prompt = mood_prompts["Professional"]
+            
+            return generate_caption_with_gemini(image_bytes, prompt)
         else:
             st.warning("Google Generative AI package not installed. Run 'pip install google-generativeai'")
             st.info("Falling back to local caption generation.")
     
-    # Local caption generation
+    # Local caption generation (enhanced)
     try:
-        # Open the image
-        img = Image.open(io.BytesIO(image_bytes))
+        # Get detailed analysis
+        analysis = analyze_image_detailed(image_bytes)
         
-        # Extract basic properties
-        width, height = img.size
-        format_name = img.format if img.format else "image"
-        aspect = "portrait" if height > width else "landscape" if width > height else "square"
+        if "error" in analysis:
+            return f"Error analyzing image: {analysis['error']}"
         
-        # Check if image is color or black and white
-        is_color = img.mode in ("RGB", "RGBA", "CMYK")
+        basic_info = analysis["basic_info"]
+        color_analysis = analysis["color_analysis"]
+        complexity = analysis["complexity"]
         
-        # Analyze colors if it's a color image
-        color_description = ""
-        if is_color:
-            # Convert to RGB if not already
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-                
-            # Resize for faster processing
-            img_small = img.resize((100, 100))
+        # Build comprehensive description
+        description_parts = []
+        
+        # Basic info
+        description_parts.append(f"📐 **Image Dimensions**: {basic_info['dimensions']} ({basic_info['orientation']})")
+        description_parts.append(f"📊 **Aspect Ratio**: {basic_info['aspect_ratio']} ({basic_info['aspect_class']})")
+        description_parts.append(f"🎨 **Format**: {basic_info['file_format']} • **Mode**: {basic_info['color_mode']}")
+        description_parts.append(f"💾 **File Size**: {basic_info['file_size']} • **Pixels**: {basic_info['total_pixels']}")
+        
+        # Color analysis
+        if color_analysis.get("is_color", False):
+            description_parts.append(f"🌈 **Color Analysis**:")
+            description_parts.append(f"   • Brightness: {color_analysis['brightness']}% ({color_analysis['brightness_level']})")
+            description_parts.append(f"   • Contrast: {color_analysis['contrast']}% ({color_analysis['contrast_level']})")
             
-            # Get color statistics
-            stat = ImageStat.Stat(img_small)
-            r, g, b = stat.mean
-            
-            # Calculate brightness
-            brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-            
-            # Determine dominant colors
-            img_small = img_small.quantize(colors=5)
-            palette = img_small.getpalette()
-            color_counts = img_small.getcolors()
-            dominant_colors = []
-            
-            if palette and color_counts:
-                # Sort colors by frequency
-                color_counts.sort(reverse=True)
-                
-                # Get top colors
-                for count, color_index in color_counts[:3]:
-                    r, g, b = palette[color_index*3:color_index*3+3]
-                    
-                    # Convert RGB to HSV for better color naming
-                    h, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
-                    
-                    # Simple color naming
-                    if s < 0.1:
-                        if v < 0.3: color_name = "black"
-                        elif v > 0.8: color_name = "white"
-                        else: color_name = "gray"
-                    elif h < 0.05 or h > 0.95: color_name = "red"
-                    elif 0.05 <= h < 0.15: color_name = "orange"
-                    elif 0.15 <= h < 0.22: color_name = "yellow"
-                    elif 0.22 <= h < 0.41: color_name = "green"
-                    elif 0.41 <= h < 0.55: color_name = "teal"
-                    elif 0.55 <= h < 0.75: color_name = "blue"
-                    elif 0.75 <= h < 0.82: color_name = "purple"
-                    else: color_name = "pink"
-                    
-                    # Add intensity
-                    if color_name not in ["black", "white", "gray"]:
-                        if s < 0.4: color_name = f"pale {color_name}"
-                        elif s > 0.8: color_name = f"vibrant {color_name}"
-                        
-                    dominant_colors.append(color_name)
-                
-                # Remove duplicates
-                dominant_colors = list(dict.fromkeys(dominant_colors))
-                
-                # Format color description
-                if len(dominant_colors) == 1:
-                    color_description = f"with {dominant_colors[0]} tones"
-                elif len(dominant_colors) == 2:
-                    color_description = f"with {dominant_colors[0]} and {dominant_colors[1]} tones"
-                else:
-                    color_description = f"with {', '.join(dominant_colors[:-1])} and {dominant_colors[-1]} tones"
-            
-            # Add brightness description
-            if brightness < 0.3:
-                tone = "dark"
-            elif brightness > 0.7:
-                tone = "bright"
-            else:
-                tone = "balanced"
-            
-            color_description = f"{tone} {color_description}"
+            if color_analysis.get('dominant_colors'):
+                color_list = []
+                for color in color_analysis['dominant_colors'][:3]:
+                    color_list.append(f"{color['name']} ({color['percentage']}%)")
+                description_parts.append(f"   • Dominant Colors: {', '.join(color_list)}")
         else:
-            color_description = "in black and white"
+            description_parts.append("🎭 **Color Mode**: Black & White/Grayscale")
         
-        # Detect edges to estimate complexity
-        edge_img = img.convert("L").filter(ImageFilter.FIND_EDGES)
-        edge_stat = ImageStat.Stat(edge_img)
-        edge_mean = edge_stat.mean[0]
+        # Complexity
+        description_parts.append(f"🔍 **Visual Complexity**: {complexity['level']} (Edge Density: {complexity['edge_density']})")
         
-        if edge_mean < 20:
-            complexity = "simple, minimalist"
-        elif edge_mean > 50:
-            complexity = "detailed, complex"
-        else:
-            complexity = "well-composed"
-        
-        # Try to detect content type using simple heuristics
-        content_type = ""
-        
-        if width / height > 2 or height / width > 2:
-            content_type = "panoramic scene"
-        elif aspect == "landscape" and brightness > 0.6:
-            content_descriptions = [
-                "outdoor scene", "landscape photograph", "scenic view",
-                "natural setting", "environmental photograph"
-            ]
-            content_type = random.choice(content_descriptions)
-        elif aspect == "portrait" and edge_mean > 30:
-            content_type = "portrait or close-up photograph"
-        elif edge_mean < 15 and brightness > 0.8:
-            content_type = "minimalist composition"
-        elif edge_mean > 60:
-            content_descriptions = [
-                "detailed photograph", "intricate scene", "richly detailed image",
-                "complex composition", "detailed artwork"
-            ]
-            content_type = random.choice(content_descriptions)
-        else:
-            content_descriptions = [
-                "photograph", "image", "composition", "visual", "picture"
-            ]
-            content_type = random.choice(content_descriptions)
-        
-        # Generate caption
-        descriptors = [
-            "striking", "captivating", "interesting", "compelling", "eye-catching",
-            "engaging", "remarkable", "notable", "impressive", "intriguing"
-        ]
+        # Generate a simple caption
+        descriptors = ["striking", "captivating", "interesting", "compelling", "eye-catching", "engaging"]
         descriptor = random.choice(descriptors)
         
-        caption = f"A {descriptor} {aspect} {content_type} {color_description}. This {complexity} image exhibits careful composition and visual balance."
+        if color_analysis.get("is_color", False):
+            primary_color = color_analysis['dominant_colors'][0]['name'].lower() if color_analysis.get('dominant_colors') else "balanced"
+            caption = f"A {descriptor} {basic_info['orientation'].lower()} image with {primary_color} tones. This {complexity['level'].lower()} composition shows careful visual balance and {color_analysis['brightness_level'].lower()} lighting."
+        else:
+            caption = f"A {descriptor} {basic_info['orientation'].lower()} black and white image. This {complexity['level'].lower()} composition demonstrates strong contrast and timeless appeal."
         
-        return caption
+        description_parts.append(f"\n📝 **Generated Caption**:\n{caption}")
+        
+        return "\n".join(description_parts)
     
     except Exception as e:
         # Handle any errors gracefully
         st.error(f"Error generating caption: {str(e)}")
-        
-        # If even the local generation fails, return a generic message
-        return "An image was uploaded. (An error occurred during caption generation.)"
+        return f"An image was uploaded. (Error during analysis: {str(e)})"
 
 def main():
     # Set page config
-    st.set_page_config(page_title="Safe Caption Web", page_icon="🖼️", layout="centered")
+    st.set_page_config(page_title="Image Caption Creator", page_icon="🖼️", layout="wide")
     
     # Apply CSS for dark theme
     st.markdown("""
@@ -299,80 +455,152 @@ def main():
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             color: #ffffff;
         }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            padding-left: 20px;
+            padding-right: 20px;
+            background-color: #2d3748;
+            border-radius: 8px 8px 0px 0px;
+            color: white;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #4299e1;
+        }
         </style>
     """, unsafe_allow_html=True)
     
     # Main content
-    st.title("🖼️ Image Caption Generator")
+    st.title("🖼️ Image Caption Creator")
+    st.markdown("Choose your mode: **Local Offline Reader** for detailed image analysis or **Gemini AI** for mood-based caption generation")
     
-    # Caption source selector
-    caption_source = st.radio(
-        "Caption Source",
-        ["Local (Offline)", "Gemini AI (Online)"],
-        index=0,
-        format_func=lambda x: x,
-        horizontal=True
-    )
-    
-    # Convert friendly names to internal values
-    caption_source_value = "local" if caption_source == "Local (Offline)" else "gemini"
-    
-    # Custom prompt for Gemini (only shown when Gemini is selected)
-    custom_prompt = None
-    if caption_source_value == "gemini":
-        with st.expander("Customize Prompt (Optional)", expanded=False):
-            custom_prompt = st.text_area(
-                "Prompt for Gemini",
-                value="Generate a detailed, creative caption for this image that would work well on social media.",
-                height=100
-            )
-            st.info("Customize how Gemini describes your image. Try prompts like 'Describe this image like a movie scene' or 'Write a poetic caption for this landscape'.")
-    
-    # File uploader
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False)
-    
-    if uploaded_file is not None:
-        # Process the uploaded image
-        image_bytes = uploaded_file.read()
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # Display the image
-        st.image(image, caption="", use_container_width=True)
-        
-        # Add a progress bar for better visual feedback
-        progress_bar = st.progress(0)
-        for i in range(100):
-            # Update progress bar
-            progress_bar.progress(i + 1)
+    # Create tabs for different modes
+    tab1, tab2 = st.tabs(["📊 Local Offline Reader", "🤖 Gemini AI Caption Generator"])
+
+    # Tab 1: Local Offline Reader
+    with tab1:
+        uploader_local = st.file_uploader(
+            "Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False, key="file_uploader_local"
+        )
+        if uploader_local is not None:
+            image_bytes = uploader_local.read()
+            image = Image.open(io.BytesIO(image_bytes))
+            st.image(image, caption="", use_container_width=True)
             
-        # Generate caption with spinner
-        with st.spinner(f"Generating your caption using {caption_source}..."):
-            caption = generate_caption(image_bytes, caption_source=caption_source_value, custom_prompt=custom_prompt)
-        
-        # Display the caption
-        st.subheader("Generated Caption:")
-        st.info(caption)
-        
-        # Add source attribution if using Gemini
-        if caption_source_value == "gemini":
-            st.caption("Caption generated using Google's Gemini AI")
+            st.subheader("🔍 Detailed Image Analysis")
+            st.info("This mode provides comprehensive offline image analysis including dimensions, colors, complexity, and more.")
+
+            progress_bar = st.progress(0)
+            for i in range(100):
+                progress_bar.progress(i + 1)
+                
+                with st.spinner("Analyzing image details..."):
+                    caption = generate_caption(image_bytes, caption_source="local")
+
+                st.markdown("### 📋 Image Analysis Report")
+                st.markdown(caption)
+                st.caption("✅ Analysis completed locally - no data sent to external servers")
         else:
-            st.caption("Caption generated locally using image analysis")
-        
-        # Memory cleanup for privacy
-        del image_bytes
-        del image
-        del caption
-    else:
-        # Show instructions when no image is uploaded
-        st.info("Please upload an image to get started.")
-        st.caption("This application can generate image captions in two ways:")
-        st.markdown("- **Local**: Works completely offline with basic image analysis")
-        st.markdown("- **Gemini**: Uses Google's AI for detailed, creative captions (requires API key)")
+            st.info("Upload an image to analyze it locally.")
+
+    # Tab 2: Gemini AI Caption Generator
+    with tab2:
+        st.subheader("✨ AI-Powered Caption Generation")
+
+        if GEMINI_AVAILABLE:
+            uploader_gemini = st.file_uploader(
+                "Upload an image", type=["jpg", "jpeg", "png"], accept_multiple_files=False, key="file_uploader_gemini"
+            )
+            if uploader_gemini is not None:
+                image_bytes = uploader_gemini.read()
+                image = Image.open(io.BytesIO(image_bytes))
+                st.image(image, caption="", use_container_width=True)
+                if 'ai_caption' in st.session_state:
+                    del st.session_state['ai_caption']
+
+                mood_options = list(get_mood_prompts().keys())
+                mood_type = st.selectbox(
+                    "Choose caption style/mood:",
+                    mood_options,
+                    index=0,
+                    help="Select the style that best matches your intended use for the caption"
+                )
+
+                mood_prompts = get_mood_prompts()
+                base_prompt = (
+                    st.text_area(
+                        "Custom Prompt:",
+                        value="Generate a detailed, creative caption for this image that would work well on social media.",
+                        height=100,
+                        help="Write your own custom prompt to guide the AI caption generation"
+                    )
+                    if mood_type == "Custom" else mood_prompts[mood_type]
+                )
+
+                with st.expander("Caption options", expanded=True):
+                    colA, colB = st.columns(2)
+                    with colA:
+                        platform = st.selectbox(
+                            "Platform",
+                            ["Instagram", "Twitter/X", "LinkedIn", "Facebook", "TikTok", "Pinterest", "YouTube", "Generic"],
+                            index=0
+                        )
+                        tone = st.selectbox(
+                            "Tone",
+                            ["Professional", "Friendly", "Humorous", "Inspirational", "Bold", "Elegant", "Playful", "Minimal"],
+                            index=0
+                        )
+                        length = st.selectbox("Length", ["Short", "Medium", "Long"], index=0)
+                        audience = st.text_input("Target audience (optional)")
+                    with colB:
+                        include_hashtags = st.checkbox("Include hashtags", value=True)
+                        num_hashtags = st.slider("Number of hashtags", 0, 8, 3)
+                        include_emojis = st.checkbox("Include emojis", value=True)
+                        num_emojis = st.slider("Number of emojis", 0, 5, 2)
+                        keywords_csv = st.text_input("Keywords (comma-separated)")
+                        call_to_action = st.text_input("Call-to-action (optional)")
+
+                composed_prompt = compose_gemini_prompt(
+                    base_prompt=base_prompt,
+                    platform=platform,
+                    tone=tone,
+                    length=length,
+                    include_hashtags=include_hashtags,
+                    num_hashtags=num_hashtags,
+                    include_emojis=include_emojis,
+                    num_emojis=num_emojis,
+                    keywords_csv=keywords_csv,
+                    audience=audience,
+                    call_to_action=call_to_action,
+                )
+
+                if st.button("Generate Caption", key="generate_gemini"):
+                    with st.spinner(f"Generating {mood_type.lower()} caption with Gemini AI..."):
+                        st.session_state['ai_caption'] = generate_caption(
+                            image_bytes,
+                            caption_source="gemini",
+                            custom_prompt=composed_prompt,
+                            mood_type="Custom",
+                        )
+
+                if 'ai_caption' in st.session_state:
+                    st.markdown("### 🎨 Generated Caption")
+                    st.success(st.session_state['ai_caption'])
+                    st.caption("🤖 Caption generated using Google's Gemini AI")
+                    if st.button("📋 Copy Caption", key="copy_ai"):
+                        st.write("Caption copied to clipboard! (Use Ctrl+C to copy manually)")
+            else:
+                st.info("Upload an image to configure options and generate a caption.")
+        else:
+            st.warning("⚠️ Gemini AI not available. Please install the required package:")
+            st.code("pip install google-generativeai")
+            st.info("Make sure to also add your Google Gemini API key to the .env file.")
     
-    # Footer with markdown instead of HTML
+    # Footer
     st.markdown("---")
-    st.caption("Safe Caption Web - Your privacy-focused image captioning solution")
+    st.caption("🖼️ Image Caption Creator - Local analysis meets AI creativity")
     st.caption("Developed with ♥ | Images processed securely | Never stored")
 
 if __name__ == "__main__":
